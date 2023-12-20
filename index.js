@@ -1,8 +1,8 @@
 const express = require("express");
 const multer = require("multer");
+const Tesseract = require("tesseract.js");
 const mysql = require("mysql");
 const sizeOf = require("image-size");
-const pdfParse = require("pdf-parse");
 
 const app = express();
 const port = 8000;
@@ -13,9 +13,14 @@ const upload = multer({ storage: storage });
 
 // MySQL setup
 const db = mysql.createConnection({
+  //   host: process.env.DB_HOST,
+  //   user: process.env.DB_USER,
+  //   password: process.env.DB_PASSWORD,
+  //   database: process.env.DB_DATABASE,
+  //   port: process.env.DB_PORT,
   host: "localhost",
-  user: "root",
-  password: "redass@15108058",
+  user: "root", // Replace with your MySQL username
+  password: "redass@15108058", // Replace with your MySQL password
   database: "metadata",
 });
 
@@ -31,8 +36,8 @@ app.get("/", (req, res) => {
   res.send("Hello, this is the root endpoint!");
 });
 
-// Express route for handling file uploads
-app.post("/metadata", upload.single("file"), async (req, res) => {
+// Express route for handling file uploads and metadata extraction
+app.post("/metadata", upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
@@ -42,14 +47,11 @@ app.post("/metadata", upload.single("file"), async (req, res) => {
   let metadata = {};
 
   if (fileType === "image") {
+    // Extract image dimensions
     const dimensions = getImageDimensions(req.file.buffer);
     metadata.dimensions = dimensions;
   } else if (fileType === "pdf") {
-    // Extract PDF metadata using pdf-parse
-    const pdfData = await getPdfMetadata(req.file.buffer);
-    metadata = pdfData.info;
-    metadata.createdDate = new Date();
-    metadata.author = "John Doe";
+    // Implement PDF metadata extraction using Tesseract.js
   }
 
   // Store metadata in MySQL database
@@ -70,6 +72,7 @@ app.post("/metadata", upload.single("file"), async (req, res) => {
 
     console.log("Metadata inserted into MySQL:", result);
 
+    // Return JSON response
     res.json({
       fileType,
       fileName: req.file.originalname,
@@ -81,7 +84,10 @@ app.post("/metadata", upload.single("file"), async (req, res) => {
 // Function to extract image dimensions
 function getImageDimensions(imageBuffer) {
   try {
+    // Use the 'image-size' library to get image dimensions
     const dimensions = sizeOf(imageBuffer);
+
+    // Return dimensions in the format "width x height"
     return `${dimensions.width}x${dimensions.height}`;
   } catch (error) {
     // Handle errors, e.g., if the buffer does not contain a valid image
@@ -90,17 +96,7 @@ function getImageDimensions(imageBuffer) {
   }
 }
 
-// Function to extract PDF metadata using pdf-parse
-async function getPdfMetadata(pdfBuffer) {
-  try {
-    const data = await pdfParse(pdfBuffer);
-    return data;
-  } catch (error) {
-    console.error("Error extracting PDF metadata:", error);
-    return {};
-  }
-}
-
+// Start the Express server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
