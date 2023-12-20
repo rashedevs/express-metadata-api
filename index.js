@@ -1,26 +1,20 @@
 const express = require("express");
 const multer = require("multer");
-const Tesseract = require("tesseract.js");
+const pdf = require("pdf-parse");
 const mysql = require("mysql");
 const sizeOf = require("image-size");
+const moment = require("moment");
 
 const app = express();
 const port = 8000;
 
-// Multer setup for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// MySQL setup
 const db = mysql.createConnection({
-  //   host: process.env.DB_HOST,
-  //   user: process.env.DB_USER,
-  //   password: process.env.DB_PASSWORD,
-  //   database: process.env.DB_DATABASE,
-  //   port: process.env.DB_PORT,
   host: "localhost",
-  user: "root", // Replace with your MySQL username
-  password: "redass@15108058", // Replace with your MySQL password
+  user: "root",
+  password: "redass@15108058",
   database: "metadata",
 });
 
@@ -36,13 +30,11 @@ app.get("/", (req, res) => {
   res.send("Hello, this is the root endpoint!");
 });
 
-// Express route for handling file uploads and metadata extraction
-app.post("/metadata", upload.single("file"), (req, res) => {
+app.post("/metadata", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
 
-  // Extract metadata based on file type
   const fileType = req.file.mimetype.includes("image") ? "image" : "pdf";
   let metadata = {};
 
@@ -51,17 +43,28 @@ app.post("/metadata", upload.single("file"), (req, res) => {
     const dimensions = getImageDimensions(req.file.buffer);
     metadata.dimensions = dimensions;
   } else if (fileType === "pdf") {
-    // Implement PDF metadata extraction using Tesseract.js
+    try {
+      // Extract author from PDF
+      const author = await extractAuthorFromPdf(req.file.buffer);
+      metadata.author = author;
+
+      // Extract other metadata from PDF (createdDate)
+      const { createdDate } = await extractPdfMetadata(req.file.buffer);
+      metadata.createdDate = createdDate;
+    } catch (error) {
+      console.error("Error extracting PDF metadata:", error);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
   }
 
-  // Store metadata in MySQL database
   const sql =
-    "INSERT INTO metadata (fileType, fileName, dimensions, metadata) VALUES (?, ?, ?, ?)";
+    "INSERT INTO metadata (fileType, fileName, dimensions, metadata, author) VALUES (?, ?, ?, ?, ?)";
   const values = [
     fileType,
     req.file.originalname,
-    metadata.dimensions,
+    metadata.dimensions || "It's pdf",
     JSON.stringify(metadata),
+    metadata.author,
   ];
 
   db.query(sql, values, (err, result) => {
@@ -72,7 +75,6 @@ app.post("/metadata", upload.single("file"), (req, res) => {
 
     console.log("Metadata inserted into MySQL:", result);
 
-    // Return JSON response
     res.json({
       fileType,
       fileName: req.file.originalname,
@@ -84,19 +86,49 @@ app.post("/metadata", upload.single("file"), (req, res) => {
 // Function to extract image dimensions
 function getImageDimensions(imageBuffer) {
   try {
-    // Use the 'image-size' library to get image dimensions
     const dimensions = sizeOf(imageBuffer);
-
-    // Return dimensions in the format "width x height"
     return `${dimensions.width}x${dimensions.height}`;
   } catch (error) {
-    // Handle errors, e.g., if the buffer does not contain a valid image
     console.error("Error extracting image dimensions:", error);
     return "unknown";
   }
 }
 
-// Start the Express server
+// Function to extract author from PDF
+async function extractAuthorFromPdf(pdfBuffer) {
+  try {
+    const data = await pdf(pdfBuffer);
+    const author = data.info.Author || "Unknown Author";
+    return author;
+  } catch (error) {
+    console.error("Error extracting author from PDF:", error);
+    return "Unknown Author";
+  }
+}
+
+// Function to extract other PDF metadata
+async function extractPdfMetadata(pdfBuffer) {
+  try {
+    const data = await pdf(pdfBuffer);
+    const createdDate = formatPdfCreationDate(data.info.CreationDate);
+    return { createdDate };
+  } catch (error) {
+    console.error("Error extracting PDF metadata:", error);
+    return { createdDate: "Invalid date" };
+  }
+}
+
+// Function to format PDF creation date
+function formatPdfCreationDate(pdfCreationDate) {
+  const momentDate = moment(pdfCreationDate, "ddd MMM DD HH:mm:ss YYYY", "en");
+  if (momentDate.isValid()) {
+    return momentDate.format("YYYY-MM-DD");
+  } else {
+    console.error("Invalid PDF creation date:", pdfCreationDate);
+    return "Invalid date";
+  }
+}
+
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
