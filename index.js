@@ -37,14 +37,6 @@ db.on("error", (err) => {
   }
 });
 
-// db.connect((err) => {
-//   if (err) {
-//     console.error("Error connecting to MySQL:", err);
-//   } else {
-//     console.log("Connected to MySQL");
-//   }
-// });
-
 app.get("/", (req, res) => {
   res.send("Hello, Welcome to metadata!");
 });
