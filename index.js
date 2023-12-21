@@ -1,4 +1,5 @@
 const express = require("express");
+const cors = require("cors");
 const multer = require("multer");
 const pdf = require("pdf-parse");
 const mysql = require("mysql");
@@ -7,7 +8,7 @@ const moment = require("moment");
 
 const app = express();
 const port = 8000;
-
+app.use(cors());
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -42,14 +43,12 @@ app.post("/metadata", upload.single("file"), async (req, res) => {
     // Extract image dimensions
     const dimensions = getImageDimensions(req.file.buffer);
     metadata.dimensions = dimensions;
+    metadata.createdDate = "N/A"; // For images, set createdDate to "N/A"
   } else if (fileType === "pdf") {
     try {
-      // Extract author from PDF
-      const author = await extractAuthorFromPdf(req.file.buffer);
+      // Extract author and created date from PDF
+      const { author, createdDate } = await extractPdfInfo(req.file.buffer);
       metadata.author = author;
-
-      // Extract other metadata from PDF (createdDate)
-      const { createdDate } = await extractPdfMetadata(req.file.buffer);
       metadata.createdDate = createdDate;
     } catch (error) {
       console.error("Error extracting PDF metadata:", error);
@@ -58,13 +57,14 @@ app.post("/metadata", upload.single("file"), async (req, res) => {
   }
 
   const sql =
-    "INSERT INTO metadata (fileType, fileName, dimensions, metadata, author) VALUES (?, ?, ?, ?, ?)";
+    "INSERT INTO metadata (fileType, fileName, dimensions, metadata, author, createdDate) VALUES (?, ?, ?, ?, ?, ?)";
   const values = [
     fileType,
     req.file.originalname,
-    metadata.dimensions || "It's pdf",
+    metadata.dimensions || "N/A",
     JSON.stringify(metadata),
-    metadata.author,
+    metadata.author || "N/A",
+    metadata.createdDate || "N/A",
   ];
 
   db.query(sql, values, (err, result) => {
@@ -79,6 +79,9 @@ app.post("/metadata", upload.single("file"), async (req, res) => {
       fileType,
       fileName: req.file.originalname,
       metadata,
+      dimensions: metadata?.dimensions || "N/A",
+      createdDate: metadata?.createdDate || "N/A",
+      author: metadata?.author || "N/A",
     });
   });
 });
@@ -94,27 +97,16 @@ function getImageDimensions(imageBuffer) {
   }
 }
 
-// Function to extract author from PDF
-async function extractAuthorFromPdf(pdfBuffer) {
+// Function to extract author and created date from PDF
+async function extractPdfInfo(pdfBuffer) {
   try {
     const data = await pdf(pdfBuffer);
     const author = data.info.Author || "Unknown Author";
-    return author;
-  } catch (error) {
-    console.error("Error extracting author from PDF:", error);
-    return "Unknown Author";
-  }
-}
-
-// Function to extract other PDF metadata
-async function extractPdfMetadata(pdfBuffer) {
-  try {
-    const data = await pdf(pdfBuffer);
     const createdDate = formatPdfCreationDate(data.info.CreationDate);
-    return { createdDate };
+    return { author, createdDate };
   } catch (error) {
-    console.error("Error extracting PDF metadata:", error);
-    return { createdDate: "Invalid date" };
+    console.error("Error extracting author and created date from PDF:", error);
+    return { author: "Unknown Author", createdDate: "Invalid date" };
   }
 }
 
@@ -122,10 +114,10 @@ async function extractPdfMetadata(pdfBuffer) {
 function formatPdfCreationDate(pdfCreationDate) {
   const momentDate = moment(pdfCreationDate, "ddd MMM DD HH:mm:ss YYYY", "en");
   if (momentDate.isValid()) {
-    return momentDate.format("YYYY-MM-DD");
+    return momentDate.format("YYYY-MM-DD HH:mm:ss");
   } else {
     console.error("Invalid PDF creation date:", pdfCreationDate);
-    return "Invalid date";
+    return "N/A";
   }
 }
 
