@@ -31,6 +31,19 @@ app.get("/", (req, res) => {
   res.send("Hello, this is the root endpoint!");
 });
 
+app.get("/metadata", (req, res) => {
+  const sql = "SELECT * FROM metadata";
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error retrieving metadata from MySQL:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+
+    res.json(results);
+  });
+});
+
 app.post("/metadata", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
