@@ -13,10 +13,6 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 const db = mysql.createConnection({
-  // host: "localhost",
-  // user: "root",
-  // password: "redass@15108058",
-  // database: "metadata",
   host: "sql12.freesqldatabase.com",
   user: "sql12672102",
   password: "NnKdN7HLJb",
@@ -33,7 +29,7 @@ db.connect((err) => {
 });
 
 app.get("/", (req, res) => {
-  res.send("Hello, this is the root endpoint!");
+  res.send("Hello, Welcome to metadata!");
 });
 
 app.get("/metadata", (req, res) => {
@@ -61,7 +57,7 @@ app.post("/metadata", upload.single("file"), async (req, res) => {
     // Extract image dimensions
     const dimensions = getImageDimensions(req.file.buffer);
     metadata.dimensions = dimensions;
-    metadata.createdDate = "N/A"; // For images, set createdDate to "N/A"
+    metadata.createdDate = "N/A";
   } else if (fileType === "pdf") {
     try {
       // Extract author and created date from PDF
@@ -140,5 +136,5 @@ function formatPdfCreationDate(pdfCreationDate) {
 }
 
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`Metadata is running on port ${port}`);
 });
