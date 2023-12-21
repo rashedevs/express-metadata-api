@@ -20,13 +20,30 @@ const db = mysql.createConnection({
   port: 3306,
 });
 
-db.connect((err) => {
-  if (err) {
-    console.error("Error connecting to MySQL:", err);
+db.on("error", (err) => {
+  console.error("Database error:", err);
+  if (err.code === "PROTOCOL_CONNECTION_LOST") {
+    // Reconnect to the database
+    db.getConnection((connectionErr, connection) => {
+      if (connectionErr) {
+        console.error("Error reconnecting to the database:", connectionErr);
+      } else {
+        console.log("Reconnected to the database");
+        connection.release();
+      }
+    });
   } else {
-    console.log("Connected to MySQL");
+    throw err;
   }
 });
+
+// db.connect((err) => {
+//   if (err) {
+//     console.error("Error connecting to MySQL:", err);
+//   } else {
+//     console.log("Connected to MySQL");
+//   }
+// });
 
 app.get("/", (req, res) => {
   res.send("Hello, Welcome to metadata!");
